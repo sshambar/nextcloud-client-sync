@@ -1,0 +1,113 @@
+#!/bin/bash
+#
+# Create Nextcloud Client Sync Container
+#
+# Copyright (C) Scott Shambarger <devel@shambarger.net>
+#
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 2 of the License, or
+#   (at your option) any later version.
+#
+# create-container [ debug ]
+#  - creates a persistent container
+# create-container run [ debug ]
+#  - creates and runs a temporary container in the foreground
+#
+# debug
+#  - replaces the entrypoint with /bin/bash (to examine the startup)
+
+# Options are defined in config file
+CONFIG=${CONFIG:-config.conf}
+
+fatal() {
+  echo >&2 "$*"
+  exit 1
+}
+
+[[ -f $CONFIG ]] || fatal "Unable to find config '$CONFIG'"
+. "$CONFIG"
+
+# required config
+[[ $IMAGE ]] || fatal "Set required IMAGE in '$CONFIG'"
+[[ $URL ]] || fatal "Set required URL in '$CONFIG'"
+[[ $LOCAL_DIR ]] || fatal "Set required LOCAL_DIR in '$CONFIG'"
+
+# validate directory
+[[ -d $LOCAL_DIR ]] || fatal "LOCAL_DIR '$LOCAL_DIR' must exist"
+
+# prefer podman if available
+[[ -z $DOCKER ]] && command >/dev/null -v podman && DOCKER=podman
+DOCKER=${DOCKER:-docker}
+command >/dev/null -v "$DOCKER" || fatal "Unable to locate $DOCKER executable"
+
+# create image if it's missing
+"$DOCKER" &>/dev/null inspect "${IMAGE}:latest" || {
+  export CONFIG
+  ./create-image || exit
+}
+
+# if SELinux available, add :Z to volume tags to support labels
+VOL_TAG=
+command >/dev/null -v getenforce && VOL_TAG=":Z"
+
+# remove any existing container
+[[ $NAME ]] && "$DOCKER" &>/dev/null rm -f "$NAME"
+
+ARGS=(--init)
+
+# default name
+[[ $NAME ]] && ARGS+=(--name "$NAME")
+
+# Add /netrc if requested
+[[ $NETRC ]] && ARGS+=(-v "${NETRC}:/netrc${VOL_TAG}")
+
+# Add /sync-exclude.lst if requested
+if [[ $EXCLUDE ]]; then
+  # NOTE: name of the remote file impacts how it's used
+  # "sync-exclude.lst" is affects all directories
+  ARGS+=(-v "${EXCLUDE}:/sync-exclude.lst${VOL_TAG}")
+fi
+
+[[ $REMOTE_PATH ]] && ARGS+=(-e "NC_PATH=${REMOTE_PATH}")
+
+if [[ $RESTART_SECS ]]; then
+  ARGS+=(-e "NC_RESYNC_SECS=${RESTART_SECS}")
+fi
+
+[[ $FAIL_RETRY_SECS ]] && \
+  ARGS+=(-e "NC_FAIL_RETRY_SECS=${FAIL_RETRY_SECS}")
+
+[[ $VERBOSE ]] && ARGS+=(-e "NC_VERBOSE=$VERBOSE")
+
+[[ $OPTIONS ]] && ARGS+=(-e "NC_OPTIONS=$OPTIONS")
+
+DEBUG=
+CMD=create
+
+while [[ $1 ]]; do
+  case "$1" in
+    debug) DEBUG=1; ARGS+=(-it --entrypoint /bin/bash);;
+    run) CMD=run;;
+    *) echo "Unknown option '$1'";
+       echo "Usage $0 [ run ] [ debug ]"
+       exit 1;;
+  esac
+  shift
+done
+
+if [[ $CMD == run ]]; then
+  ARGS+=(--rm)
+elif [[ -z $DEBUG ]]; then
+  # if restarting... make the container auto-restart
+  [[ $RESTART_SECS && $RESTART_SECS -gt 0 ]] && \
+    ARGS+=(--restart unless-stopped)
+fi
+
+if [[ $DEBUG ]]; then \
+  echo "$DOCKER" $CMD "${CREATE_ARGS[@]}" -e "NC_URL=${URL}" \
+       -v "${LOCAL_DIR}:/data${VOL_TAG}" "${ARGS[@]}" "${IMAGE}"
+fi
+
+"$DOCKER" $CMD "${CREATE_ARGS[@]}" -e "NC_URL=${URL}" \
+          -v "${LOCAL_DIR}:/data${VOL_TAG}" "${ARGS[@]}" "${IMAGE}"

@@ -1,0 +1,48 @@
+
+Project: nextcloud-client-sync
+
+Author: Scott Shambarger <devel@shambarger.net>
+
+Description:
+
+Project creates and persistent container for the NextCloud command line
+sync program.  It requires docker (or preferably podman).
+It's full documentation can be found at:
+
+  https://docs.nextcloud.com/desktop/latest/advancedusage.html#nextcloud-command-line-client
+
+All project configuration (and defaults) are defined in:
+
+  config.conf
+
+Examine config.conf for all the configuration options.  To set or override
+those values, create a new file:
+  
+  local_config.conf
+
+Then run `create-container` to build the image, and create the container.
+
+Usage: create-container [ debug ]
+  - Creates a persistent container.  After creating it, start/stop it with:
+
+    `docker start nextcloud-sync`
+    `docker stop nextcloud-sync`
+
+Usage: create-container run [ debug ]
+  - Creates a temporary container and runs it in the foreground
+
+"debug" in either case replaces the entrypoint with /bin/bash.
+
+Other files:
+
+create-image - Usage: create-image [ all ]
+  - Used by create-container to build images based on alpine:latest
+    that contain all the packages for nextcloudcmd.  "all" forces the
+    re-creation of the nextcloud-client-base image, which includes all
+    the nextcloud-client packages (large!)
+
+Dockerfile.base - dockerfile for nextcloud-client-base
+
+Dockerfile - based on nextcloud-client-base, adds sync entrypoint
+
+entrypoint.sh - entrypoint script for the container

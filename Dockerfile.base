@@ -1,0 +1,27 @@
+
+# use base image from Docker Hub and upgrade existing packages
+FROM alpine:latest AS base
+
+RUN apk --no-cache upgrade --purge
+
+RUN apk add --no-cache nextcloud-client bash && rm -rf /etc/apk/cache
+
+# remove unneeded bulk
+RUN rm -rf /usr/lib/libQt5WebEngineCore.so*
+RUN rm -rf /usr/lib/libQt5Pdf.so*
+RUN rm -rf /usr/lib/libQt5Qml.so*
+RUN rm -rf /usr/lib/libQt5Quick.so*
+RUN rm -rf /usr/lib/libx265.so*
+RUN rm -rf /usr/lib/libaom.so*
+RUN rm -rf /usr/lib/libvpx.so*
+RUN rm -rf /usr/lib/libavcodec.so*
+RUN rm -rf /usr/lib/libavformat.so*
+RUN rm -rf /usr/share/qt5 /usr/share/icu
+RUN rm -rf /usr/lib/qt5/qml/QtQuick
+
+# copy contents of the original base image to a new image so we
+# don't have overlapping files in layers
+FROM scratch
+COPY --from=base / /
+
+ENTRYPOINT ["/usr/bin/nextcloudcmd"]

@@ -1,0 +1,57 @@
+#!/bin/bash
+#
+# Create Nextcloud Client Sync Container
+#
+# Copyright (C) Scott Shambarger <devel@shambarger.net>
+#
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 2 of the License, or
+#   (at your option) any later version.
+#
+# create-image [ all ]
+#  - creates images containing the nextcloudcmd
+#
+# Images created:
+#
+# nextcloud-client-base - contains nextcloud-client with GUI removed
+#
+# $IMAGE - based on nextcloud-client-base with entrypoint/config added
+#
+
+# this is used in Dockerfile
+BASE=nextcloud-client-base:latest
+
+# IMAGE defined in the config file
+CONFIG=${CONFIG:-config.conf}
+
+fatal() {
+  echo >&2 "$*"
+  exit 1
+}
+
+[[ -f $CONFIG ]] || fatal "Unable to find config '$CONFIG'"
+. "$CONFIG"
+
+[[ $IMAGE ]] || fatal "Set required IMAGE in '$CONFIG'"
+
+[[ -z $DOCKER ]] && command >/dev/null -v podman && DOCKER=podman
+DOCKER=${DOCKER:-docker}
+command >/dev/null -v "$DOCKER" || fatal "Unable to locate $DOCKER executable"
+
+if [[ $1 == all ]]; then
+  "$DOCKER" &>/dev/null inspect "${BASE}" && "$DOCKER" untag "${BASE}"
+fi
+
+# don't rebuild large base image if it exists
+"$DOCKER" &>/dev/null inspect "${BASE}" || {
+  echo "Building ${BASE}"
+  "$DOCKER" build -f Dockerfile.base -t "${BASE}" . || exit
+}
+
+echo "Building ${IMAGE}:latest"
+"$DOCKER" build -t "${IMAGE}:latest" . || exit
+
+# cleanup
+echo "Removing dangling/unused images"
+"$DOCKER" image prune -f
