@@ -2,22 +2,23 @@
 # use base image from Docker Hub and upgrade existing packages
 FROM alpine:latest AS base
 
-RUN apk --no-cache upgrade --purge
-
-RUN apk add --no-cache nextcloud-client bash && rm -rf /etc/apk/cache
-
+RUN apk --no-cache upgrade --purge; \
+  apk add --no-cache nextcloud-client bash; \
 # remove unneeded bulk
-RUN rm -rf /usr/lib/libQt5WebEngineCore.so*
-RUN rm -rf /usr/lib/libQt5Pdf.so*
-RUN rm -rf /usr/lib/libQt5Qml.so*
-RUN rm -rf /usr/lib/libQt5Quick.so*
-RUN rm -rf /usr/lib/libx265.so*
-RUN rm -rf /usr/lib/libaom.so*
-RUN rm -rf /usr/lib/libvpx.so*
-RUN rm -rf /usr/lib/libavcodec.so*
-RUN rm -rf /usr/lib/libavformat.so*
-RUN rm -rf /usr/share/qt5 /usr/share/icu
-RUN rm -rf /usr/lib/qt5/qml/QtQuick
+  rm -rf \
+    /etc/apk/cache \
+    /usr/lib/libQt5WebEngineCore.so* \
+    /usr/lib/libQt5Pdf.so* \
+    /usr/lib/libQt5Qml.so* \
+    /usr/lib/libQt5Quick.so* \
+    /usr/lib/libx265.so* \
+    /usr/lib/libaom.so* \
+    /usr/lib/libvpx.so* \
+    /usr/lib/libavcodec.so* \
+    /usr/lib/libavformat.so* \
+    /usr/share/qt5 \
+    /usr/share/icu \
+    /usr/lib/qt5/qml/QtQuick
 
 # copy contents of the original base image to a new image so we
 # don't have overlapping files in layers

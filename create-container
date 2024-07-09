@@ -1,13 +1,10 @@
 #!/bin/bash
 #
-# Create Nextcloud Client Sync Container
+# Create Nextcloud Client Sync Container v1.0
+# Author: Scott Shambarger <devel@shambarger.net>
 #
-# Copyright (C) Scott Shambarger <devel@shambarger.net>
-#
-#   This program is free software; you can redistribute it and/or modify
-#   it under the terms of the GNU General Public License as published by
-#   the Free Software Foundation; either version 2 of the License, or
-#   (at your option) any later version.
+# Copyright (C) Scott Shambarger. All rights reserved.
+# SPDX-License-Identifier: GPL-2.0-or-later
 #
 # create-container [ debug ]
 #  - creates a persistent container
@@ -19,6 +16,12 @@
 
 # Options are defined in config file
 CONFIG=${CONFIG:-config.conf}
+
+usage() {
+  [[ $1 ]] && echo "Unknown option '$1'";
+  echo "Usage: ${0##*/} [ run ] [ debug ] | help"
+  [[ -z $1 ]]; exit
+}
 
 fatal() {
   echo >&2 "$*"
@@ -71,43 +74,37 @@ fi
 
 [[ $REMOTE_PATH ]] && ARGS+=(-e "NC_PATH=${REMOTE_PATH}")
 
-if [[ $RESTART_SECS ]]; then
-  ARGS+=(-e "NC_RESYNC_SECS=${RESTART_SECS}")
-fi
+vars=(RESTART_SECS FAIL_RETRY_SECS VERBOSE OPTIONS LOG_FILE LOG_MAX_BYTES
+      LOG_ARCHIVES SENDMAIL_OPTIONS ERROR_TO ERROR_FROM ERROR_SUBJECT
+      ERROR_COUNT)
 
-[[ $FAIL_RETRY_SECS ]] && \
-  ARGS+=(-e "NC_FAIL_RETRY_SECS=${FAIL_RETRY_SECS}")
-
-[[ $VERBOSE ]] && ARGS+=(-e "NC_VERBOSE=$VERBOSE")
-
-[[ $OPTIONS ]] && ARGS+=(-e "NC_OPTIONS=$OPTIONS")
+for var in "${vars[@]}"; do [[ ${!var} ]] && ARGS+=(-e "NC_$var=${!var}"); done
 
 DEBUG=
 CMD=create
 
 while [[ $1 ]]; do
   case "$1" in
-    debug) DEBUG=1; ARGS+=(-it --entrypoint /bin/bash);;
+    debug) DEBUG=1; ARGS+=(-t --entrypoint /bin/bash);;
     run) CMD=run;;
-    *) echo "Unknown option '$1'";
-       echo "Usage $0 [ run ] [ debug ]"
-       exit 1;;
+    -h|--help|help) usage;;
+    *) usage "$1";;
   esac
   shift
 done
 
 if [[ $CMD == run ]]; then
-  ARGS+=(--rm)
-elif [[ -z $DEBUG ]]; then
-  # if restarting... make the container auto-restart
-  [[ $RESTART_SECS && $RESTART_SECS -gt 0 ]] && \
-    ARGS+=(--restart unless-stopped)
+  ARGS+=(--rm -i)
+else
+  if [[ -z $DEBUG ]]; then
+    # if restarting... make the container auto-restart
+    [[ $RESTART_SECS && $RESTART_SECS -gt 0 ]] && \
+      ARGS+=(--restart unless-stopped)
+  fi
 fi
 
-if [[ $DEBUG ]]; then \
-  echo "$DOCKER" $CMD "${CREATE_ARGS[@]}" -e "NC_URL=${URL}" \
-       -v "${LOCAL_DIR}:/data${VOL_TAG}" "${ARGS[@]}" "${IMAGE}"
-fi
+echo "$DOCKER" $CMD "${CREATE_ARGS[@]}" -e "NC_URL=${URL}" \
+     -v "${LOCAL_DIR}:/data${VOL_TAG}" "${ARGS[@]}" "${IMAGE}"
 
 "$DOCKER" $CMD "${CREATE_ARGS[@]}" -e "NC_URL=${URL}" \
           -v "${LOCAL_DIR}:/data${VOL_TAG}" "${ARGS[@]}" "${IMAGE}"
