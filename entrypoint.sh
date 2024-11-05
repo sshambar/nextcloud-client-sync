@@ -1,17 +1,19 @@
 #!/bin/bash
 #
-# nextcloud-client-sync container entrypoint.sh v1.0
+# nextcloud-client-sync container entrypoint.sh v1.1
 # Author: Scott Shambarger <devel@shambarger.net>
 #
 # Copyright (C) Scott Shambarger. All rights reserved.
 # SPDX-License-Identifier: GPL-2.0-or-later
+#
+# shellcheck disable=SC2086
 
 log() { echo "$(date -D "%m-%d %H:%M:%S"): $*"; }
 err() { log >&2 "$*"; }
 fatal() { err "$*"; exit 1; }
 
 to_int() { # <var>
-  printf 2>/dev/null -v "$1" "%d" "${!1}" || printf -v "$1" 0
+  printf 2>/dev/null -v "$1" "%d" "${!1-}" || printf -v "$1" 0
 }
 
 # sanity check
@@ -19,11 +21,15 @@ to_int NC_LOG_MAX_BYTES
 (( NC_LOG_MAX_BYTES < 20000 )) && NC_LOG_MAX_BYTES=20000
 to_int NC_LOG_ARCHIVES
 (( NC_LOG_ARCHIVES < 1 )) && NC_LOG_ARCHIVES=1
+to_int NC_ERROR_COUNT
+(( NC_ERROR_COUNT < 1 )) && NC_ERROR_COUNT=''
+to_int NC_ERROR_REMIND_COUNT
+(( NC_ERROR_REMIND_COUNT < 1 )) && NC_ERROR_REMIND_COUNT=''
 
 log_rotate() {
   local i d=$NC_LOG_FILE
   [[ $d ]] || return
-  if [[ $(find . -maxdepth 1 -name "$d" -size "+${NC_LOG_MAX_BYTES}c") ]]; then
+  if [[ $(find "$d" -size "+${NC_LOG_MAX_BYTES}c") ]]; then
     for ((i==NC_LOG_ARCHIVES-1; i>0; i--)); do
       [[ -f "$d.$i" ]] && mv "$d."{$i,$((i+1))}
     done
@@ -102,21 +108,39 @@ while :; do
     fi
     [[ $delay && $NC_FAIL_RETRY_SECS ]] && delay=$NC_FAIL_RETRY_SECS
 
-    if [[ $NC_ERROR_TO && $fail_count == "${NC_ERROR_COUNT:-1}" ]]; then
-      err "Sending error email to $NC_ERROR_TO"
-      sendmail $NC_SENDMAIL_OPTIONS -f "$NC_ERROR_FROM" $NC_ERROR_TO <<EOF
-From: $NC_ERROR_FROM
-To: $NC_ERROR_TO
-Subject: $NC_ERROR_SUBJECT
-Date: $(date -R)
+    if [[ $NC_ERROR_TO ]]; then
+      if [[ $fail_count == "${NC_ERROR_COUNT:-1}" ]]; then
+        err "Sending error email to $NC_ERROR_TO"
+        sendmail $NC_SENDMAIL_OPTIONS -f "$NC_ERROR_FROM" $NC_ERROR_TO <<-EOF
+	From: $NC_ERROR_FROM
+	To: $NC_ERROR_TO
+	Subject: $NC_ERROR_SUBJECT
+	Date: $(date -R)
 
-Command failed $fail_count times (error $rc):
-nextcloudcmd ${NC_OPTIONS} "${NC_ARGS[@]}" "$NC_DATADIR" "$NC_URL"
+	Command failed $fail_count times (error $rc):
+	nextcloudcmd ${NC_OPTIONS} "${NC_ARGS[@]}" "$NC_DATADIR" "$NC_URL"
 
-Error log:
-$(<"$error_log")
+	Error log:
+	$(<"$error_log")
 
-EOF
+	EOF
+      elif [[ $NC_ERROR_REMIND_COUNT &&
+                $((fail_count % NC_ERROR_REMIND_COUNT)) == 0 ]]; then
+        err "Sending reminder email to $NC_ERROR_TO"
+        sendmail $NC_SENDMAIL_OPTIONS -f "$NC_ERROR_FROM" $NC_ERROR_TO <<-EOF
+	From: $NC_ERROR_FROM
+	To: $NC_ERROR_TO
+	Subject: Reminder: $NC_ERROR_SUBJECT
+	Date: $(date -R)
+
+	Command still failing (now $fail_count times, error $rc):
+	nextcloudcmd ${NC_OPTIONS} "${NC_ARGS[@]}" "$NC_DATADIR" "$NC_URL"
+
+	Error log:
+	$(<"$error_log")
+
+	EOF
+      fi
     fi
   else
     fail_count=0

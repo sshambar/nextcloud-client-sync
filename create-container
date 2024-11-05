@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Create Nextcloud Client Sync Container v1.0
+# Create Nextcloud Client Sync Container v1.1
 # Author: Scott Shambarger <devel@shambarger.net>
 #
 # Copyright (C) Scott Shambarger. All rights reserved.
@@ -76,7 +76,7 @@ fi
 
 vars=(RESTART_SECS FAIL_RETRY_SECS VERBOSE OPTIONS LOG_FILE LOG_MAX_BYTES
       LOG_ARCHIVES SENDMAIL_OPTIONS ERROR_TO ERROR_FROM ERROR_SUBJECT
-      ERROR_COUNT)
+      ERROR_COUNT ERROR_REMIND_COUNT)
 
 for var in "${vars[@]}"; do [[ ${!var} ]] && ARGS+=(-e "NC_$var=${!var}"); done
 
